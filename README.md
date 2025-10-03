@@ -1,2 +1,5 @@
-# lite-jnc
-Educational Java compiler in Go that generates native x86-64 ELF binaries for Linux. Compiles Java directly to Intel syntax assembly and machine code.
+# Lite Java - Native Compiler
+
+- Native Java compiler written in Go. 
+- Translates Java source to x86-64 assembly (Intel syntax) and compiles to standalone ELF executables for Linux. 
+- Supports a subset of Java features.
