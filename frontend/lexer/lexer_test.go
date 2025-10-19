@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/JoachimTislov/lite-jnc/env"
-	"github.com/JoachimTislov/lite-jnc/lexer"
+	"github.com/JoachimTislov/lite-jnc/frontend/lexer"
 )
 
 func TestLexer(t *testing.T) {
@@ -14,8 +14,8 @@ func TestLexer(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	first := lexer.NextToken()
-	second := lexer.NextToken()
+	first, _ := lexer.NextToken()
+	second, _ := lexer.NextToken()
 	if first == second {
 		t.Error("First and second token is the same, state is not working")
 	}
