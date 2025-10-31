@@ -7,7 +7,7 @@ import (
 
 	"github.com/JoachimTislov/lite-jnc/compiler"
 	"github.com/JoachimTislov/lite-jnc/env"
-	"github.com/JoachimTislov/lite-jnc/frontend"
+	"github.com/JoachimTislov/lite-jnc/parser"
 	"github.com/JoachimTislov/lite-jnc/spec"
 	"github.com/JoachimTislov/lite-jnc/transpiler"
 )
@@ -20,16 +20,16 @@ func main() {
 	// compile := flag.Bool("c", false, "Compile the transpiled language. Nothing happens when compiling directly to machine code")
 	flag.Parse()
 
-	frontend, err := frontend.NewFrontend(path, language)
+	p, err := parser.New(*path, *language)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var runner spec.Runner
 	if transpiler.Supports(*language) {
-		runner = transpiler.New(frontend)
+		runner = transpiler.New(p)
 	} else {
-		runner = compiler.New(frontend)
+		runner = compiler.New(p)
 	}
 	runner.Run(*out)
 }

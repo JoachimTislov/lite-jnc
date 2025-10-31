@@ -8,3 +8,6 @@
 ## Resources and considerations
 
 - Consider using: [LLVM - pkg](https://pkg.go.dev/tinygo.org/x/go-llvm) to support multiple architectures.
+- [Lexical analysis in Go - Rob Pike](https://www.youtube.com/watch?v=HxaD_trXwRE)
+    - [template lexer go source](https://go.dev/src/text/template/parse/lex.go)
+- [aaronraff blog - how to write a lexer in Go](https://aaronraff.dev/blog/how-to-write-a-lexer-in-go)

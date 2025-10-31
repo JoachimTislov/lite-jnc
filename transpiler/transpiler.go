@@ -3,10 +3,9 @@ package transpiler
 import (
 	"os"
 
-	"github.com/JoachimTislov/lite-jnc/frontend"
+	"github.com/JoachimTislov/lite-jnc/parser"
 )
 
-type transpiler struct{ frontend *frontend.Frontend }
 type transpiled int
 
 const (
@@ -30,8 +29,10 @@ func Supports(lang string) bool {
 	return exists
 }
 
-func New(frontend *frontend.Frontend) *transpiler {
-	return &transpiler{frontend}
+type transpiler struct{ *parser.Parser }
+
+func New(p *parser.Parser) *transpiler {
+	return &transpiler{p}
 }
 
 func (t *transpiler) Run(out string) *os.File {

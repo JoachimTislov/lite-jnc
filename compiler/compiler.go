@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/JoachimTislov/lite-jnc/frontend"
+	"github.com/JoachimTislov/lite-jnc/parser"
 )
 
 type Compiled int
@@ -18,11 +18,11 @@ var languages = map[string]Compiled{
 }
 
 type compiler struct {
-	*frontend.Frontend
+	*parser.Parser
 }
 
-func New(frontend *frontend.Frontend) *compiler {
-	return &compiler{frontend}
+func New(p *parser.Parser) *compiler {
+	return &compiler{p}
 }
 
 func (c *compiler) Run(out string) *os.File {
