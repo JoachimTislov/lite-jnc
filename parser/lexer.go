@@ -164,5 +164,5 @@ func (l *lexer) pos() pos {
 	if tokenLen == 1 {
 		start = l.column
 	}
-	return pos{l.line, start, l.column}
+	return pos{l.line, start, l.column - 1}
 }
