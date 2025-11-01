@@ -13,7 +13,7 @@ func (t token) String() string {
 	if t.pos.start == t.pos.end {
 		rang = fmt.Sprintf("%d", t.pos.end)
 	}
-	return fmt.Sprintf("kind: %-12s value: %-15s %d:%s", t.kind, t.value, t.pos.line, rang)
+	return fmt.Sprintf("kind: %-12s; value: %-15s %d:%s", t.kind, t.value, t.pos.line, rang)
 }
 
 type pos struct {
@@ -32,7 +32,10 @@ const (
 	TYPE
 	KEYWORD
 	EOF
-	PUNCTUATION
+	ERROR
+	OPUNCTUATION
+	CPUNCTUATION
+	PARAMETER
 	DELIMITER
 	OPERAND
 	OPERATOR
@@ -45,17 +48,19 @@ const (
 )
 
 var tokens = map[tokenKind]string{
-	EOF:         TOKEN_EOF,
-	IDENTIFIER:  TOKEN_IDENTIFIER,
-	ILLEGAL:     "invalid",
-	MODIFIER:    "modifier",
-	TYPE:        "type",
-	KEYWORD:     "keyword",
-	LITERAL:     "literal",
-	PUNCTUATION: "punctuation",
-	DELIMITER:   "delimiter",
-	OPERAND:     "operand",
-	OPERATOR:    "operator",
+	EOF:          TOKEN_EOF,
+	IDENTIFIER:   TOKEN_IDENTIFIER,
+	ILLEGAL:      "invalid",
+	MODIFIER:     "modifier",
+	TYPE:         "type",
+	KEYWORD:      "keyword",
+	LITERAL:      "literal",
+	OPUNCTUATION: "cpunctuation",
+	CPUNCTUATION: "opunctuation",
+	PARAMETER:    "parameter",
+	DELIMITER:    "delimiter",
+	OPERAND:      "operand",
+	OPERATOR:     "operator",
 }
 
 func (t tokenKind) String() string {
