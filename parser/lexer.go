@@ -2,23 +2,26 @@ package parser
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"unicode"
 )
 
-type stateFn func(*lexer) stateFn
+type lexStateFn func(*lexer) lexStateFn
 
 type lexer struct {
-	reader  *bufio.Reader
-	line    int
-	column  int
-	runes   []rune
-	error   string
-	state   stateFn
-	tokens  chan *token
-	cleanup func()
+	reader    *bufio.Reader
+	line      int
+	column    int
+	runes     []rune
+	state     lexStateFn
+	prevToken string
+	tokens    chan *token
+	running   bool
+	done      bool
+	cleanup   func()
 }
 
 func newLexer(src string) (*lexer, error) {
@@ -26,12 +29,12 @@ func newLexer(src string) (*lexer, error) {
 	if err != nil {
 		return nil, err
 	}
-	chanTokens := make(chan *token)
+	chanTokens := make(chan *token, 10)
 	return &lexer{
 		reader: bufio.NewReader(file),
 		line:   1,
 		column: 1,
-		state:  lexText,
+		state:  lexClass,
 		tokens: chanTokens,
 		cleanup: func() {
 			file.Close()
@@ -44,74 +47,262 @@ func isWhitespace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\r' || r == '\n'
 }
 
-// lex switches to the appropriate state function based on the rune
-func lexText(l *lexer) stateFn {
+func isNumber(r rune) bool {
+	return '0' <= r && r <= '9'
+}
+
+// lexText switches to the appropriate state function based on the rune
+// TODO: spread the logic into other functions and set the lexClass at default state, Java does not allow anything other than class declarations at top level
+// func lexText(l *lexer) lexStateFn {
+// 	for {
+// 		switch r := l.read(); r {
+// 		case TOKEN_QUOTE:
+// 			l.readStringLiteral()
+// 		case '.', ';':
+// 			l.emit(DELIMITER)
+// 		case '+', '-', '*', '/', '%', '=', '!', '<', '>':
+// 			l.emit(OPERATOR)
+// 		default:
+// 			if unicode.IsLetter(r) {
+// 				l.readWhile(unicode.IsLetter)
+// 				return lexToken
+// 			}
+// 			if isNumber(r) {
+// 				l.readWhile(isNumber)
+// 				return lexNumber
+// 			}
+// 			l.emit(NOT_SUPPORTED)
+// 		}
+// 	}
+// }
+
+func (l *lexer) enforceWhitespace(kind tokenKind) {
+	if !isWhitespace(l.next()) {
+		l.emit(
+			ERROR,
+			fmt.Sprintf("%s must be followed by a space and then '%s'", l.prevToken, kind),
+		)
+	}
+}
+
+// lexClass lexes class declarations and returns lexField state
+func lexClass(l *lexer) lexStateFn {
+	for {
+		w := l.readWord()
+		if w == "" {
+			return nil
+		}
+		if l.isAccessModifier() {
+			l.enforceWhitespace(CLASS)
+			w = l.readWord()
+		}
+		if w != TOKEN_CLASS {
+			l.emit(
+				ERROR,
+				"missing class declaration",
+				"class declarations can start with an access modifier (public, private or protected) followed by the 'class' keyword",
+			)
+		} else {
+			l.emit(CLASS)
+		}
+		l.enforceWhitespace(IDENTIFIER)
+		className := l.readWord()
+		l.emit(IDENTIFIER)
+		if className == "" {
+			l.emit(
+				ERROR,
+				"missing class name",
+				"an identifier must follow the 'class' keyword",
+			)
+		}
+		r := l.read()
+		if r != TOKEN_OBRACE {
+			l.emit(
+				ERROR,
+				fmt.Sprintf("expected '%c' found '%s'", TOKEN_OBRACE, l.readToken()),
+				"multiple identifiers are not supported",
+			)
+			// Try to recover by reading until the opening brace
+			l.readUntil(TOKEN_OBRACE)
+			l.emit(
+				ERROR,
+				"missing opening brace for class body",
+			)
+		}
+		l.emit(OBRACE)
+		return lexField
+	}
+}
+
+// lexField lexes fields inside a class
+// returns lexMethod
+func lexField(l *lexer) lexStateFn {
+	if l.read() == TOKEN_CBRACE {
+		l.emit(CBRACE)
+		return lexClass
+	}
+	l.readWord()
+	if l.isAccessModifier() {
+		l.enforceWhitespace(KEYWORD)
+		l.readWord()
+	}
+	if l.isFieldModifier() {
+		l.enforceWhitespace(KEYWORD)
+		l.readType()
+	}
+	l.enforceWhitespace(KEYWORD)
+	l.readToken()
+	l.emit(IDENTIFIER)
+
+	// Read access modifier, optional static or final modifier, read type, read identifier ...
+	// '(' indicates method
+	// ';' indicates declaration
+	// '=' indicates declaration with initialization
+
+	r := l.read()
+	switch r {
+	case TOKEN_OPAREN:
+		l.emit(OPAREN)
+		return lexMethod
+	case ';':
+		l.emit(DELIMITER)
+	case '=':
+		l.emit(OPERATOR)
+		// TODO: handle field initialization
+	default:
+		l.emit(ERROR, "expected '(', ';', or '=' after identifier")
+	}
+	return lexField
+}
+
+// lexMethod lexes parameters inside method parentheses and returns lexMethodBody
+func lexMethod(l *lexer) lexStateFn {
 	for {
 		r := l.read()
-		switch r {
-		case TOKEN_QUOTE:
-			l.readStringLiteral()
-		case '(':
-			return lexParen
-		case '[', '{':
-			l.emit(OPUNCTUATION)
-		case ']', '}':
-			l.emit(CPUNCTUATION)
-		case ':', ',', '.', ';':
+		if r == TOKEN_COMMA {
+			l.emit(DELIMITER)
+		}
+		if !l.readType() {
+			l.emit(
+				ERROR,
+				"invalid parameter type",
+				"expected a valid type in parameter list",
+			)
+		}
+		l.enforceWhitespace(PARAMETER)
+		l.readToken()
+		l.emit(PARAMETER)
+		r = l.read()
+		if r == TOKEN_COMMA {
+			continue
+		}
+		if r != TOKEN_CPAREN {
+			l.emit(
+				ERROR,
+				"missing closing parenthesis in parameter list",
+				"parameters must be separated by commas",
+				"end the list with a closing parenthesis",
+			)
+		}
+		l.emit(CPAREN)
+		l.enforceWhitespace(OBRACE)
+		r = l.read()
+		if r != TOKEN_OBRACE {
+			l.emit(
+				ERROR,
+				"missing opening brace for method body",
+			)
+		}
+		l.emit(OBRACE)
+		return lexMethodBody
+	}
+}
+
+func lexMethodBody(l *lexer) lexStateFn {
+	for {
+		switch r := l.read(); r {
+		case TOKEN_CBRACE:
+			l.emit(CBRACE)
+			return lexField
+		case TOKEN_OPAREN:
+			l.emit(OPAREN)
+			return lexMethodArguments
+		case '.', ';':
 			l.emit(DELIMITER)
 		case '+', '-', '*', '/', '%', '=', '!', '<', '>':
 			l.emit(OPERATOR)
 		default:
 			if unicode.IsLetter(r) {
-				return lexToken
+				l.readWhile(unicode.IsLetter)
+				l.emit(IDENTIFIER)
 			}
-			l.emit(ILLEGAL)
+			if isNumber(r) {
+				l.readWhile(isNumber)
+				l.emit(LITERAL)
+			}
 		}
 	}
 }
 
-func (l *lexer) readStringLiteral() {
-	l.readEmit(TOKEN_QUOTE, LITERAL)
+func (l *lexer) isAccessModifier() bool {
+	switch l.currToken() {
+	case "public":
+		l.emit(PUBLIC)
+	case "private":
+		l.emit(PRIVATE)
+	case "protected":
+		l.emit(PROTECTED)
+	}
+	return l.currToken() == ""
 }
 
-func (l *lexer) readEmit(r rune, kind tokenKind) {
-	l.readUntil(r)
-	l.emit(kind)
+func (l *lexer) isFieldModifier() bool {
+	switch l.currToken() {
+	case "static":
+		l.emit(STATIC)
+	case "final":
+		l.emit(FINAL)
+	}
+	return l.currToken() == ""
 }
+
+func (l *lexer) readStringLiteral() {
+	l.nextUntil(TOKEN_QUOTE)
+	l.read() // consume closing quote
+}
+
+// func (l *lexer) readEmit(r rune, kind tokenKind) {
+// 	l.readUntil(r)
+// 	l.emit(kind)
+// }
 
 // lexParen lexes a parameter list inside parentheses
-func lexParen(l *lexer) stateFn {
-	l.emit(OPUNCTUATION)
+func lexMethodArguments(l *lexer) lexStateFn {
 	for {
-		r := l.read()
-		switch r {
+		switch r := l.read(); r {
 		case TOKEN_QUOTE:
 			l.readStringLiteral()
-			continue
-		case ',':
-			l.emit(DELIMITER)
-			continue
-		case ')':
-			l.emit(CPUNCTUATION)
-			return lexText
-		}
-
-		l.readType()
-		l.emit(TYPE)
-
-		if isWhitespace(l.next()) {
+		case TOKEN_COMMA:
+			if l.prevToken != "" && l.prevToken != "," {
+				l.emit(DELIMITER)
+				l.enforceWhitespace(ARGUMENT)
+			} else {
+				l.emit(ERROR, "unexpected comma in argument list")
+			}
+		case TOKEN_CPAREN:
+			l.emit(CPAREN)
+			return lexMethodBody
+		default:
 			l.readToken()
-			l.emit(PARAMETER)
-		} else {
-			l.emit(ERROR, "expected whitespace after type in parameter list", "parameters must be separated by commas")
-			l.backup()
+			// l.emit(ERROR, fmt.Sprintf("unexpected token '%s' in argument list", l.readToken()))
 		}
+		l.emit(ARGUMENT)
 	}
 }
 
 // readWhile reads runes while the condition is true
 // Only call this if the invalid rune should be available for the next read
-func (l *lexer) readWhile(cond func(rune) bool) string {
+func (l *lexer) readWhile(cond func(rune) bool) {
 	for {
 		r := l.next()
 		if cond(r) {
@@ -121,75 +312,75 @@ func (l *lexer) readWhile(cond func(rune) bool) string {
 			break
 		}
 	}
-	return string(l.runes)
 }
 
-// readUntil adds runes the delimiter is found
-// Similar to reader.readString() but does not include the delimiter
+// nextUntil adds runes until the delimiter is found.
+// ignores spaces and quotes.
+// reads everything except the delimiter
+func (l *lexer) nextUntil(delim rune) {
+	l.until(l.next, delim)
+}
+
+// readUntil adds runes until the delimiter is found.
+// reads everything except the delimiter
 func (l *lexer) readUntil(delim rune) {
-	for {
-		r := l.next()
-		if r == delim {
-			break
-		}
+	l.until(l.read, delim)
+}
+
+func (l *lexer) until(fn func() rune, delim rune) {
+	for r := fn(); r != delim; r = fn() {
 		l.runes = append(l.runes, r)
 	}
+	l.backup()
 }
 
 // readNumber reads a sequence of digits
-// func (l *lexer) readNumber() string {
-// 	return l.readWhile(func(r rune) bool {
-// 		return unicode.IsDigit(r)
-// 	})
+// func (l *lexer) readNumber() {
+// 	l.readWhile(unicode.IsDigit)
 // }
 
-func (l *lexer) readType() string {
-	return l.readWhile(func(r rune) bool {
-		return unicode.IsLetter(r) || r == '[' || r == ']'
+// TODO: Write a more robust and strict switch statement
+func (l *lexer) readType() bool {
+	l.readWhile(func(r rune) bool {
+		return unicode.IsLetter(r) || r == '[' || r == ']' || r == '<' || r == '>' || r == '.'
 	})
+	return l.isType()
 }
 
 // readToken reads an alphanumeric token (letters, digits, underscores)
 func (l *lexer) readToken() string {
-	return l.readWhile(func(r rune) bool {
+	l.readWhile(func(r rune) bool {
 		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 	})
+	return l.currToken()
 }
 
-// readWord reads a sequence of letters
 func (l *lexer) readWord() string {
-	return l.readWhile(func(r rune) bool {
-		return unicode.IsLetter(r)
-	})
+	l.readWhile(unicode.IsLetter)
+	return l.currToken()
 }
 
-// func (l *lexer) eatWhitespace() {
-// 	for {
-// 		r := l.next()
-// 		if !isWhitespace(r) {
-// 			l.backup()
-// 			break
-// 		}
-// 	}
-// }
+// currToken returns the current token as a string
+func (l *lexer) currToken() string {
+	return string(l.runes)
+}
 
-// readToken reads a sequence of letters and goes into lexIdentifier state
-func lexToken(l *lexer) stateFn {
-	switch l.readWord() {
-	case "public", "private", "protected", "static":
-		l.emit(MODIFIER)
-	case "interface", "abstract", "class", "extends", "implements", "new", "return", "if", "else", "for", "while", "break", "continue":
-		l.emit(KEYWORD)
-	case "void", "int", "float", "double", "char", "boolean", "String":
-		l.emit(TYPE)
+// isType emits PRIMITIVE or REFERENCE token if current token is a type
+// TODO: Add support for arrays
+func (l *lexer) isType() bool {
+	switch l.currToken() {
+	case "void", "int", "float", "double", "char", "boolean":
+		l.emit(PRIMITIVE)
+	case "String", "Integer", "Float", "Double", "Character", "Boolean":
+		l.emit(REFERENCE)
 	default:
-		l.emit(IDENTIFIER)
+		l.emit(NOT_SUPPORTED)
 	}
-	return lexText
+	return l.currToken() == ""
 }
 
 // read returns the next non-whitespace rune.
-// Does not add whitespace or quotes to the runes buffer
+// whitespace and quotes are not add to buffer
 func (l *lexer) read() rune {
 	for {
 		r := l.next()
@@ -203,6 +394,8 @@ func (l *lexer) read() rune {
 	}
 }
 
+// next returns the next rune from the reader.
+// no filtering of any kind is done here
 func (l *lexer) next() rune {
 	r, _, e := l.reader.ReadRune()
 	if e != nil {
@@ -221,11 +414,19 @@ func (l *lexer) next() rune {
 	return r
 }
 
-func (l *lexer) run() {
-	defer l.cleanup()
-	for l.state != nil {
-		l.state = l.state(l)
+func (l *lexer) nextToken() *token {
+	if !l.running {
+		l.running = true
+		go func() {
+			defer l.cleanup()
+			// Start the state machine
+			for l.state != nil {
+				l.state = l.state(l)
+			}
+			l.emit(EOF)
+		}()
 	}
+	return <-l.tokens
 }
 
 func (l *lexer) peek() rune {
@@ -246,21 +447,32 @@ func (l *lexer) backup() {
 	}
 }
 
-func (l *lexer) emit(kind tokenKind, errors ...string) {
-	var t *token
-	if len(errors) > 0 {
-		t = &token{l.pos(), strings.Join(errors, "; "), ERROR}
-	} else {
-		t = &token{l.pos(), string(l.runes), kind}
-		l.runes = nil
+func listErrors(errors []string) string {
+	return "- " + strings.Join(errors, "\n\t- ")
+}
+
+func (l *lexer) emit(kind tokenKind, msgs ...string) {
+	t := &token{l.pos(), listErrors(msgs), kind}
+	if kind != ERROR && len(msgs) == 0 {
+		t = &token{l.pos(), l.currToken(), kind}
 	}
+	l.prevToken = t.value
+	l.runes = nil
 	l.tokens <- t
 }
 
-func (l *lexer) pos() pos {
-	return pos{
+func (l *lexer) pos() *pos {
+	return &pos{
 		line:  l.line,
 		start: l.column - len(l.runes),
 		end:   l.column - 1,
 	}
+}
+
+func (p *pos) String() string {
+	rang := fmt.Sprintf("%d-%d", p.start, p.end)
+	if p.start >= p.end {
+		rang = fmt.Sprintf("%d", p.end)
+	}
+	return fmt.Sprintf("%d:%s", p.line, rang)
 }

@@ -3,17 +3,16 @@ package parser
 import "fmt"
 
 type token struct {
-	pos
+	*pos
 	value string
 	kind  tokenKind
 }
 
-func (t token) String() string {
-	rang := fmt.Sprintf("%d-%d", t.pos.start, t.pos.end)
-	if t.pos.start == t.pos.end {
-		rang = fmt.Sprintf("%d", t.pos.end)
+func (t *token) String() string {
+	if t.kind == ERROR {
+		return fmt.Sprintf("ERROR(%v): \n\t%s", t.pos, t.value)
 	}
-	return fmt.Sprintf("kind: %-12s; value: %-15s %d:%s", t.kind, t.value, t.pos.line, rang)
+	return fmt.Sprintf("kind: %-20s value: %-20s pos: %v", t.kind, t.value, t.pos)
 }
 
 type pos struct {
@@ -25,47 +24,104 @@ type pos struct {
 type tokenKind int
 
 const (
-	ILLEGAL tokenKind = iota
+	NOT_SUPPORTED tokenKind = iota
 	IDENTIFIER
-	MODIFIER
+
+	PUBLIC
+	PRIVATE
+	PROTECTED
+	STATIC
+	FINAL
+
+	// keywords
+	CLASS
+
 	LITERAL
-	TYPE
 	KEYWORD
 	EOF
 	ERROR
-	OPUNCTUATION
-	CPUNCTUATION
+
+	// punctuations
+	OPAREN
+	CPAREN
+	OBRACE
+	CBRACE
+	OBRACKET
+	CBRACKET
+
+	// types
+	PRIMITIVE
+	REFERENCE
+
+	// others
 	PARAMETER
+	ARGUMENT
 	DELIMITER
 	OPERAND
 	OPERATOR
 )
 
 const (
-	TOKEN_EOF        = "EOF"
-	TOKEN_IDENTIFIER = "identifier"
-	TOKEN_QUOTE      = '"'
+	// strings
+	TOKEN_EOF   = "EOF"
+	TOKEN_CLASS = "class"
+	// runes
+	TOKEN_QUOTE  = '"'
+	TOKEN_COMMA  = ','
+	TOKEN_CPAREN = ')'
+	TOKEN_OPAREN = '('
+	TOKEN_OBRACE = '{'
+	TOKEN_CBRACE = '}'
+	SPACE        = ' '
 )
 
-var tokens = map[tokenKind]string{
-	EOF:          TOKEN_EOF,
-	IDENTIFIER:   TOKEN_IDENTIFIER,
-	ILLEGAL:      "invalid",
-	MODIFIER:     "modifier",
-	TYPE:         "type",
-	KEYWORD:      "keyword",
-	LITERAL:      "literal",
-	OPUNCTUATION: "cpunctuation",
-	CPUNCTUATION: "opunctuation",
-	PARAMETER:    "parameter",
-	DELIMITER:    "delimiter",
-	OPERAND:      "operand",
-	OPERATOR:     "operator",
-}
-
 func (t tokenKind) String() string {
-	if str, ok := tokens[t]; ok {
-		return str
+	switch t {
+	case EOF:
+		return TOKEN_EOF
+	case ERROR:
+		return "error"
+	case IDENTIFIER:
+		return "identifier"
+	case CLASS:
+		return "class"
+	case ARGUMENT:
+		return "argument"
+	case NOT_SUPPORTED:
+		return "not supported"
+	case PUBLIC, PRIVATE, PROTECTED:
+		return "access modifier"
+	case STATIC, FINAL:
+		return "persistence modifier"
+	case PRIMITIVE:
+		return "primitive type"
+	case REFERENCE:
+		return "reference"
+	case KEYWORD:
+		return "keyword"
+	case LITERAL:
+		return "literal"
+	case OPAREN:
+		return "oparen"
+	case CPAREN:
+		return "cparen"
+	case OBRACE:
+		return "obrace"
+	case CBRACE:
+		return "cbrace"
+	case OBRACKET:
+		return "obracket"
+	case CBRACKET:
+		return "cbracket"
+	case PARAMETER:
+		return "parameter"
+	case DELIMITER:
+		return "delimiter"
+	case OPERAND:
+		return "operand"
+	case OPERATOR:
+		return "operator"
+	default:
+		return "unknown"
 	}
-	return TOKEN_IDENTIFIER
 }
