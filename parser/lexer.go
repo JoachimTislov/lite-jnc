@@ -166,6 +166,7 @@ func lexField(l *lexer) lexStateFn {
 		return lexMethod
 	case ';':
 		l.emit(DELIMITER)
+		// TODO: handle field declaration
 	case '=':
 		l.emit(OPERATOR)
 		// TODO: handle field initialization
@@ -253,7 +254,7 @@ func (l *lexer) isAccessModifier() bool {
 	case "protected":
 		l.emit(PROTECTED)
 	}
-	return l.currToken() == ""
+	return l.runesIsEmpty()
 }
 
 func (l *lexer) isFieldModifier() bool {
@@ -263,18 +264,13 @@ func (l *lexer) isFieldModifier() bool {
 	case "final":
 		l.emit(FINAL)
 	}
-	return l.currToken() == ""
+	return l.runesIsEmpty()
 }
 
 func (l *lexer) readStringLiteral() {
 	l.nextUntil(TOKEN_QUOTE)
 	l.read() // consume closing quote
 }
-
-// func (l *lexer) readEmit(r rune, kind tokenKind) {
-// 	l.readUntil(r)
-// 	l.emit(kind)
-// }
 
 // lexParen lexes a parameter list inside parentheses
 func lexMethodArguments(l *lexer) lexStateFn {
@@ -315,13 +311,13 @@ func (l *lexer) readWhile(cond func(rune) bool) {
 }
 
 // nextUntil adds runes until the delimiter is found.
-// ignores spaces and quotes.
 // reads everything except the delimiter
 func (l *lexer) nextUntil(delim rune) {
 	l.until(l.next, delim)
 }
 
 // readUntil adds runes until the delimiter is found.
+// ignores spaces and quotes.
 // reads everything except the delimiter
 func (l *lexer) readUntil(delim rune) {
 	l.until(l.read, delim)
@@ -365,10 +361,36 @@ func (l *lexer) currToken() string {
 	return string(l.runes)
 }
 
+// contains returns true if the current token contains any of the provided runes
+// func (l *lexer) contains(runes ...rune) bool {
+// 	for _, r := range l.runes {
+// 		if slices.Contains(runes, r) {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
+
+// isTokenGenericType returns true if the current token ends with '>'
+// Java generic types end with '>'
+func (l *lexer) isGeneric() bool {
+	return l.runes[len(l.runes)-1] == '>'
+}
+
+func (l *lexer) runesIsEmpty() bool {
+	return len(l.runes) == 0
+}
+
 // isType emits PRIMITIVE or REFERENCE token if current token is a type
-// TODO: Add support for arrays
+// Strings with [ or ] are handled as standard types by removing the brackets before checking
+// TODO: Add robust handling for generics and arrays, and error reporting
 func (l *lexer) isType() bool {
-	switch l.currToken() {
+	if l.isGeneric() {
+		l.emit(NOT_SUPPORTED)
+		return l.runesIsEmpty()
+	}
+	// Handle array types by removing brackets
+	switch strings.Split(l.currToken(), "[")[0] {
 	case "void", "int", "float", "double", "char", "boolean":
 		l.emit(PRIMITIVE)
 	case "String", "Integer", "Float", "Double", "Character", "Boolean":
@@ -376,11 +398,11 @@ func (l *lexer) isType() bool {
 	default:
 		l.emit(NOT_SUPPORTED)
 	}
-	return l.currToken() == ""
+	return l.runesIsEmpty()
 }
 
 // read returns the next non-whitespace rune.
-// whitespace and quotes are not add to buffer
+// whitespace and quotes are not added to runes buffer
 func (l *lexer) read() rune {
 	for {
 		r := l.next()
