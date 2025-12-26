@@ -30,10 +30,13 @@ const (
 	PUBLIC
 	PRIVATE
 	PROTECTED
+
 	STATIC
 	FINAL
 
 	// keywords
+	PACKAGE
+	IMPORT
 	CLASS
 
 	LITERAL
@@ -50,15 +53,37 @@ const (
 	CBRACKET
 
 	// types
-	PRIMITIVE
-	REFERENCE
+	VOID
+	INT
+	FLOAT
+	STRING
+	BOOLEAN
+	DOUBLE
+	CHAR
 
 	// others
 	PARAMETER
 	ARGUMENT
 	DELIMITER
+	SEMICOLON
+	COMMA
+	PERIOD
+	QUESTION
+	COLON
+
 	OPERAND
 	OPERATOR
+
+	EQUALS
+	ASSIGN
+	PLUS
+	MINUS
+	MULTIPLY
+	DIVIDE
+	PERCENT
+	NOT
+	LT
+	GT
 )
 
 const (
@@ -66,13 +91,14 @@ const (
 	TOKEN_EOF   = "EOF"
 	TOKEN_CLASS = "class"
 	// runes
-	TOKEN_QUOTE  = '"'
-	TOKEN_COMMA  = ','
-	TOKEN_CPAREN = ')'
-	TOKEN_OPAREN = '('
-	TOKEN_OBRACE = '{'
-	TOKEN_CBRACE = '}'
-	SPACE        = ' '
+	TOKEN_QUOTE     = '"'
+	TOKEN_COMMA     = ','
+	TOKEN_SEMICOLON = ';'
+	TOKEN_CPAREN    = ')'
+	TOKEN_OPAREN    = '('
+	TOKEN_OBRACE    = '{'
+	TOKEN_CBRACE    = '}'
+	SPACE           = ' '
 )
 
 func (t tokenKind) String() string {
@@ -89,14 +115,32 @@ func (t tokenKind) String() string {
 		return "argument"
 	case NOT_SUPPORTED:
 		return "not supported"
-	case PUBLIC, PRIVATE, PROTECTED:
-		return "access modifier"
-	case STATIC, FINAL:
-		return "persistence modifier"
-	case PRIMITIVE:
-		return "primitive type"
-	case REFERENCE:
-		return "reference"
+	case SEMICOLON:
+		return "semicolon"
+	case COMMA:
+		return "comma"
+	case PERIOD:
+		return "period"
+	case QUESTION:
+		return "question"
+	case COLON:
+		return "colon"
+	case PACKAGE:
+		return "package"
+	case VOID:
+		return "void"
+	case IMPORT:
+		return "import"
+	case PUBLIC:
+		return "public"
+	case PRIVATE:
+		return "private"
+	case PROTECTED:
+		return "protected"
+	case STATIC:
+		return "static"
+	case FINAL:
+		return "final"
 	case KEYWORD:
 		return "keyword"
 	case LITERAL:

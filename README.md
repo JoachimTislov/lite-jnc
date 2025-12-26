@@ -11,3 +11,14 @@
 - [Lexical analysis in Go - Rob Pike](https://www.youtube.com/watch?v=HxaD_trXwRE)
     - [template lexer go source](https://go.dev/src/text/template/parse/lex.go)
 - [aaronraff blog - how to write a lexer in Go](https://aaronraff.dev/blog/how-to-write-a-lexer-in-go)
+- [Go template package - lex.go](https://go.dev/src/text/template/parse/lex.go)
+
+## TOODs
+
+### Lexer
+
+- Handle missing ending punctionations convieniently
+    - Either to the end of file or if the expected punctation is not found
+    - A missing '"' or '`' can't be handled by any other means than reaching the end of the file. Logically the lexer can't know when the user intends to end the string. Same goes for alot of other unclosed punctuations:
+        - `/*`
+    - `(`, `{`, `[` - possible to avoid of file before realizing that there is no closing `)`

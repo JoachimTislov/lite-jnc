@@ -7,7 +7,7 @@ import (
 
 func (c *compiler) ELF() {
 	ast, err := c.Parser.Parse()
-	fmt.Printf("AST: %+v\n", ast)
+	fmt.Println(ast)
 	if err != nil {
 		log.Print(err)
 	}
