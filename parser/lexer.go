@@ -69,7 +69,7 @@ func lexClass(l *lexer) lexStateFn {
 		l.enforceWhitespace(CLASS)
 		w = l.readWord()
 	}
-	if w != TOKEN_CLASS {
+	if w != "class" {
 		l.emit(
 			ERROR,
 			"missing class declaration",
@@ -138,7 +138,6 @@ func lexField(l *lexer) lexStateFn {
 		return lexMethod
 	case TOKEN_SEMICOLON:
 		l.emit(SEMICOLON)
-		// TODO: handle field declaration
 	case '=':
 		l.emit(ASSIGN)
 		// TODO: handle field initialization
@@ -372,12 +371,12 @@ func (l *lexer) runesIsEmpty() bool {
 	return len(l.runes) == 0
 }
 
-// isType emits PRIMITIVE or REFERENCE token if current token is a type
+// TODO: isType emits PRIMITIVE or REFERENCE token if current token is a type
 // Strings with [ or ] are handled as standard types by removing the brackets before checking
 // TODO: Add robust handling for generics and arrays, and error reporting
 func (l *lexer) isType() bool {
 	if l.isGeneric() {
-		l.emit(NOT_SUPPORTED)
+		l.emit(NOT_SUPPORTED, "generic types are not supported")
 		return l.runesIsEmpty()
 	}
 	// Handle array types by removing brackets

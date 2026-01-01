@@ -56,7 +56,6 @@ func funcCaller(skip int) (string, string, int, bool) {
 }
 
 // nextToken advances the parser to the next token.
-// TODO: Load data to a file field and add it to the ast
 func (p *Parser) nextToken() {
 	p.prevToken = p.curr.token
 	p.curr.token = p.peekToken
@@ -138,16 +137,6 @@ func (p *Parser) parseModifiers() (mods modifiers, isFinal bool) {
 	return mods, isFinal
 }
 
-// TODO: parseClass only operates per token instance...
-// debate on what is best practice. One state iteration should live longer than one token
-// new structure could be
-// eat mods with switch statement until class keyword
-// then expect identifier for class name
-// then expect opening brace
-// then enter declaration parsing state
-// This state should arguably not handle closing brace...
-// could implement a buffer to hold tokens until closing brace is found
-// but not doing anything while in that state seems wasteful
 func parseClass(p *Parser) parseStateFn {
 	mods, _ := p.parseModifiers()
 	p.expectNext(CLASS)

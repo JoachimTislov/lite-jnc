@@ -16,23 +16,22 @@ type tokenKind int
 
 const (
 	NOT_SUPPORTED tokenKind = iota
-	IDENTIFIER
+	EOF
 
+	// modifiers
 	PUBLIC
 	PRIVATE
 	PROTECTED
-
 	STATIC
 	FINAL
 
 	// keywords
+	KEYWORD
+	IDENTIFIER
+	LITERAL
 	PACKAGE
 	IMPORT
 	CLASS
-
-	LITERAL
-	KEYWORD
-	EOF
 
 	// errors
 	CRITICAL
@@ -57,19 +56,16 @@ const (
 	DOUBLE
 	CHAR
 
-	// others
+	// method elements
 	PARAMETER
 	ARGUMENT
-	DELIMITER
+
+	// delimiter
 	SEMICOLON
 	COMMA
 	DOT
-	QUESTION
-	COLON
 
-	OPERAND
-	OPERATOR
-
+	// operators
 	EQUALS
 	ASSIGN
 	PLUS
@@ -83,10 +79,6 @@ const (
 )
 
 const (
-	// strings
-	TOKEN_CLASS = "class"
-
-	// runes
 	TOKEN_QUOTE     = '"'
 	TOKEN_COMMA     = ','
 	TOKEN_SEMICOLON = ';'
@@ -94,7 +86,6 @@ const (
 	TOKEN_OPAREN    = '('
 	TOKEN_OBRACE    = '{'
 	TOKEN_CBRACE    = '}'
-	SPACE           = ' '
 )
 
 func (t tokenKind) String() string {
@@ -107,6 +98,8 @@ func (t tokenKind) String() string {
 		return "WARNING"
 	case CRITICAL:
 		return "CRITICAL"
+	case INFO:
+		return "INFO"
 	case IDENTIFIER:
 		return "identifier"
 	case CLASS:
@@ -121,10 +114,6 @@ func (t tokenKind) String() string {
 		return "comma"
 	case DOT:
 		return "period"
-	case QUESTION:
-		return "question"
-	case COLON:
-		return "colon"
 	case PACKAGE:
 		return "package"
 	case VOID:
@@ -159,12 +148,6 @@ func (t tokenKind) String() string {
 		return "cbracket"
 	case PARAMETER:
 		return "parameter"
-	case DELIMITER:
-		return "delimiter"
-	case OPERAND:
-		return "operand"
-	case OPERATOR:
-		return "operator"
 	case STRING:
 		return "string"
 	case INT:

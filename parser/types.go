@@ -94,6 +94,8 @@ type parseStateFn func(*Parser) parseStateFn
 
 // curr holds the current parsing context
 // per state iteration (e.g., parsing a class, method, field, etc.)
+// acts with alot of side effects. Not ideal. TODO: Should reconsider design
+// keep in mind that its either these or more code per state function and thereby fewer state functions
 type curr struct {
 	*token
 	class  *class
@@ -103,6 +105,7 @@ type curr struct {
 	decl   *decl
 }
 
+// TODO: Consider adding a token buffer, possibly replace prev, peek with a slice of tokens
 type Parser struct {
 	Target string
 	*lexer
