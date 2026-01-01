@@ -20,7 +20,6 @@ type lexer struct {
 	prevToken string
 	tokens    chan *token
 	running   bool
-	done      bool
 	cleanup   func()
 }
 
@@ -29,7 +28,7 @@ func newLexer(src string) (*lexer, error) {
 	if err != nil {
 		return nil, err
 	}
-	chanTokens := make(chan *token, 10)
+	chanTokens := make(chan *token)
 	return &lexer{
 		reader: bufio.NewReader(file),
 		line:   1,
@@ -203,7 +202,7 @@ func lexMethodBody(l *lexer) lexStateFn {
 			l.emit(OPAREN)
 			return lexMethodArguments
 		case '.':
-			l.emit(PERIOD)
+			l.emit(DOT)
 		case TOKEN_SEMICOLON:
 			l.emit(SEMICOLON)
 		case '+':
@@ -264,7 +263,6 @@ func (l *lexer) readStringLiteral() {
 	l.read() // consume closing quote
 }
 
-// lexParen lexes a parameter list inside parentheses
 func lexMethodArguments(l *lexer) lexStateFn {
 	for {
 		switch r := l.read(); r {
@@ -366,7 +364,6 @@ func (l *lexer) currToken() string {
 // }
 
 // isTokenGenericType returns true if the current token ends with '>'
-// Java generic types end with '>'
 func (l *lexer) isGeneric() bool {
 	return l.runes[len(l.runes)-1] == '>'
 }
@@ -463,7 +460,7 @@ func (l *lexer) nextToken() *token {
 
 func (l *lexer) backup() {
 	if err := l.reader.UnreadRune(); err != nil {
-		panic(err)
+		l.emit(CRITICAL, "unable to backup lexer reader")
 	}
 	// Handles backing up when rune is a newline
 	if l.column == 1 {
@@ -473,14 +470,10 @@ func (l *lexer) backup() {
 	}
 }
 
-func listErrors(errors []string) string {
-	return "- " + strings.Join(errors, "\n\t- ")
-}
-
 func (l *lexer) emit(kind tokenKind, msgs ...string) {
-	t := &token{l.pos(), listErrors(msgs), kind}
-	if kind != ERROR && len(msgs) == 0 {
-		t = &token{l.pos(), l.currToken(), kind}
+	t := &token{l.pos(), l.currToken(), kind}
+	if len(msgs) > 0 {
+		t.value += ": " + strings.Join(msgs, "\n\t- ")
 	}
 	l.prevToken = t.value
 	l.runes = nil
@@ -493,12 +486,4 @@ func (l *lexer) pos() *pos {
 		start: l.column - len(l.runes),
 		end:   l.column - 1,
 	}
-}
-
-func (p *pos) String() string {
-	rang := fmt.Sprintf("%d-%d", p.start, p.end)
-	if p.start >= p.end {
-		rang = fmt.Sprintf("%d", p.end)
-	}
-	return fmt.Sprintf("%d:%s", p.line, rang)
 }

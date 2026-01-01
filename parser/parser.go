@@ -3,304 +3,297 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
 )
 
-type Node interface {
-	Name() string
-	Position() pos
-}
-
-type Statement interface {
-	Node
-	Execute()
-}
-
-type Expression interface {
-	Node
-	Evaluate()
-}
-
-type node struct {
-	name string
-	pos  *pos
-}
-
-func (n *node) Name() string   { return n.name }
-func (n *node) Position() *pos { return n.pos }
-
-type decl struct {
-	*node
-	value string
-	kind  tokenKind
-}
-
-// type variableDecl decl
-type parameter decl
-
-type modifiers []*tokenKind
-
-type field struct {
-	decl
-	modifiers
-	initVal string
-}
-
-type method struct {
-	decl
-	modifiers
-	body
-	parameters []*parameter
-	returnType tokenKind
-}
-
-type body struct {
-	statements  []*Statement
-	Expressions []*Expression
-}
-
-type class struct {
-	*node
-	visibility tokenKind
-	fields     []*field
-	methods    []*method
-}
-
-type pkg struct {
-	Name    string
-	Classes []*class
-}
-
-type importDecl struct {
-	pkgName string
-	alias   string
-}
-
-type file struct {
-	path string
-	// pkg     pkg
-	imports []*importDecl
-	classes []*class
-}
-
-type AST struct {
-	packages []*pkg
-	files    []*file
-}
-
-func (a *AST) String() string {
-	for _, f := range a.files {
-		for _, c := range f.classes {
-			fmt.Print(c)
-			for _, m := range c.methods {
-				fmt.Print("\n", m)
-				for _, p := range m.parameters {
-					fmt.Print("\n", p)
-				}
-			}
-		}
-	}
-	return ""
-}
-
-func (m *method) String() string {
-	return fmt.Sprintf("method: %s, return type: %s, pos: %v, params: %d", m.name, m.returnType, m.pos, len(m.parameters))
-}
-
-func (c *class) String() string {
-	return fmt.Sprintf("class: %s, pos: %v, methods: %d, fields: %d", c.name, c.pos, len(c.methods), len(c.fields))
-}
-
-func (p *parameter) String() string {
-	return fmt.Sprintf("param: %s, type: %s, pos: %v, value: %s", p.name, p.kind, p.pos, p.value)
-}
-
-func (f *field) String() string {
-	return fmt.Sprintf("field: %s, type: %s, pos: %v, modifiers: %d, initVal: %s", f.name, f.kind, f.pos, len(f.modifiers), f.initVal)
-}
-
-type Parser struct {
-	Target string
-	*lexer
-	ast      *AST
-	currFile *file
-	prev     *token
-	curr     *token
-	peek     *token
-	errors   []error
-}
-
+// TOOD: Add fault tolerance, so that parser can continue parsing after an error
 func New(path string, language string) (*Parser, error) {
-	lexer, err := newLexer(path)
-	if err != nil {
+	if lexer, err := newLexer(path); err != nil {
 		return nil, err
+	} else {
+		execFile := &file{path: path}
+		return &Parser{
+			lexer:  lexer,
+			Target: language,
+			ast:    &AST{files: []*file{execFile}},
+			curr: curr{
+				file: execFile,
+			},
+			peekToken:  lexer.nextToken(),
+			state:      parseClass,
+			errorLimit: 5,
+		}, nil
 	}
-	f := &file{path: path}
-	p := &Parser{
-		lexer:    lexer,
-		Target:   language,
-		currFile: f,
-		ast:      &AST{files: []*file{f}},
-	}
-
-	// prime current and peek tokens
-	p.nextToken()
-	p.nextToken()
-
-	return p, nil
-}
-
-// nextToken advances the parser to the next token.
-func (p *Parser) nextToken() {
-	p.prev = p.curr
-	p.curr = p.peek
-	p.peek = p.lexer.nextToken()
-}
-
-func (p *Parser) expect(kind tokenKind) bool {
-	if p.nextToken(); p.curr.kind == kind {
-		return true
-	}
-	p.errorf("expected %s, got %s", kind, p.curr.kind)
-	return false
 }
 
 // Parse parses the tokens and returns the AST or an error if parsing fails.
-func (p *Parser) Parse() (*AST, error) {
-	for p.curr.kind != EOF {
-		p.nextToken()
-		switch p.curr.kind {
-		case PACKAGE:
-		// TODO: p.parsePackage()
-		case IMPORT:
-		// TODO: p.parseImport()
-		case CLASS:
-			class, err := p.parseClass()
-			if err != nil {
-				p.errorf("failed to parse class at %v: %v", class.pos, err)
-			}
-			p.currFile.classes = append(p.currFile.classes, class)
-		case ERROR:
-			p.errorf("lexical error(s) at %v: \n\t%s", p.curr.pos, p.curr.value)
+func (p *Parser) Parse() (*AST, []error) {
+	if !p.running {
+		p.running = true
+		for p.state != nil && p.peekToken.kind != EOF && len(p.errors) < p.errorLimit {
+			p.state = p.state(p)
 		}
+		p.running = false
 	}
-
-	if len(p.errors) > 0 {
-		return p.ast, fmt.Errorf("parsing errors:\n %v", errors.Join(p.errors...))
-	}
-
-	return p.ast, nil
+	return p.ast, p.errors
 }
 
-func (t tokenKind) isAccessModifier() bool {
-	return t == PUBLIC || t == PRIVATE || t == PROTECTED
+func (t *token) node() node {
+	return node{t.value, t.pos}
 }
 
-// parseClass, enters at 'class' token, expects class name next and modifer to be previous
-func (p *Parser) parseClass() (*class, error) {
-	class := &class{
-		node: &node{
-			name: p.peek.value,
-			pos:  p.curr.pos,
-		},
+func funcCaller(skip int) (string, string, int, bool) {
+	pc, file, line, ok := runtime.Caller(skip)
+	fn := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	fnName := fn[len(fn)-1]
+	if fnName == "expect" || fnName == "expectNext" {
+		return funcCaller(skip + 2)
 	}
-	if p.prev != nil {
-		if !p.prev.kind.isAccessModifier() {
-			return class, fmt.Errorf("expected modifier, got %s", p.prev.kind)
-		}
-		class.visibility = p.prev.kind
-	}
-	p.expect(IDENTIFIER)
-	p.expect(OBRACE)
+	return fnName, filepath.Base(file), line, ok
+}
 
-	closeBraceCount := 1
-	var mods modifiers
-	var d decl
-	for closeBraceCount > 0 {
-		p.nextToken()
-		switch p.curr.kind {
-		case PUBLIC, PRIVATE, PROTECTED, STATIC, FINAL:
-			mods = append(mods, &p.curr.kind)
-		case INT, FLOAT, STRING, BOOLEAN, VOID:
-			d = decl{
-				node: &node{
-					name: p.peek.value,
-					pos:  p.peek.pos,
-				},
-				kind: p.curr.kind,
+// nextToken advances the parser to the next token.
+// TODO: Load data to a file field and add it to the ast
+func (p *Parser) nextToken() {
+	p.prevToken = p.curr.token
+	p.curr.token = p.peekToken
+
+	// Block advancement past EOF
+	if p.peekToken.kind == EOF {
+		funcName, file, line, ok := funcCaller(2)
+		fmt.Println("nextToken was called after reaching end of file")
+		if ok {
+			fmt.Printf("caller: %s (%s:%d)\n\n", funcName, filepath.Base(file), line)
+		}
+		return
+	}
+
+	t := p.lexer.nextToken()
+	if t == nil {
+		panic("lexer returned nil token. This can happen if token channel is closed")
+	}
+	switch t.kind {
+	case NOT_SUPPORTED:
+		p.errorf("token: %s, is not supported", t.value)
+	case CRITICAL:
+		// TODO: Add fatal error handling
+	case ERROR, WARNING:
+		p.errorf(fmt.Sprintf("%s: %s", t.kind, t.value))
+	case INFO:
+		// TODO: Handle info logs
+	default:
+		p.peekToken = t
+	}
+}
+
+func (p *Parser) expect(kind ...tokenKind) bool {
+	if slices.Contains(kind, p.curr.token.kind) {
+		return true
+	}
+	p.errorf("expected one of %v, got %s", kind, p.curr.token.kind)
+	return false
+}
+
+func (p *Parser) expectNext(kind ...tokenKind) bool {
+	p.nextToken()
+	return p.expect(kind...)
+}
+
+func (k tokenKind) isModifier() bool {
+	switch k {
+	case PUBLIC, PRIVATE, PROTECTED, STATIC, FINAL:
+		return true
+	default:
+		return false
+	}
+}
+
+// parseModifiers parses visibility and other modifiers for classes, methods, and fields.
+func (p *Parser) parseModifiers() (mods modifiers, isFinal bool) {
+	mods = modifiers{
+		visibility: PACKAGE,
+	}
+	for p.peekToken.kind.isModifier() {
+		switch p.nextToken(); p.curr.token.kind {
+		case PUBLIC, PRIVATE, PROTECTED:
+			if mods.isStatic || isFinal {
+				p.errorf("Visibility modifier must be declared before static and final")
 			}
+			if mods.visibility != PACKAGE {
+				p.errorf("Multiple visibility modifiers declared")
+			}
+			mods.visibility = p.curr.token.kind
+		case STATIC:
+			mods.isStatic = true
+		case FINAL:
+			if p.peekToken.kind == STATIC {
+				p.errorf("Final can't be declared before static")
+			}
+			isFinal = true
+		}
+	}
+	return mods, isFinal
+}
+
+// TODO: parseClass only operates per token instance...
+// debate on what is best practice. One state iteration should live longer than one token
+// new structure could be
+// eat mods with switch statement until class keyword
+// then expect identifier for class name
+// then expect opening brace
+// then enter declaration parsing state
+// This state should arguably not handle closing brace...
+// could implement a buffer to hold tokens until closing brace is found
+// but not doing anything while in that state seems wasteful
+func parseClass(p *Parser) parseStateFn {
+	mods, _ := p.parseModifiers()
+	p.expectNext(CLASS)
+	p.expectNext(IDENTIFIER)
+	p.expectNext(OBRACE)
+	p.curr.class = &class{
+		modifiers: mods,
+		node:      p.prevToken.node(),
+	}
+	return parseDeclaration
+}
+
+func parseDeclaration(p *Parser) parseStateFn {
+	if p.curr.token.kind == CBRACE {
+		p.nextToken()
+		p.addClass(p.curr.class)
+		return parseClass
+	}
+	mods, isFinal := p.parseModifiers()
+	p.expectNext(INT, FLOAT, STRING, BOOLEAN, VOID)
+	p.expectNext(IDENTIFIER)
+	p.decl = &decl{
+		modifiers: mods,
+		isFinal:   isFinal,
+		node:      p.curr.token.node(),
+		kind:      p.prevToken.kind,
+	}
+	switch p.nextToken(); p.curr.token.kind {
+	case OPAREN:
+		p.nextToken()
+		return parseParams
+	case ASSIGN:
+		return parseField
+	case SEMICOLON:
+		p.class.fields = append(p.class.fields, &field{decl: p.decl})
+	case CBRACE:
+		// if p.peekToken.kind == EOF {
+		// 	p.errorf("class: %s is missing a closing bracket", p.getClass().name)
+		// 	return nil
+		// }
+		return parseClass
+	default:
+		p.errorf("unexpected token (declaration): %s", p.curr.token.kind)
+	}
+	return parseDeclaration
+}
+
+func parseArguments(p *Parser) parseStateFn {
+	m := &method{decl: &decl{node: p.prevToken.node()}}
+	for p.curr.token.kind != CPAREN {
+		p.expectNext(ARGUMENT)
+		m.parameters = append(m.parameters, &decl{
+			kind: p.curr.token.kind,
+			node: p.curr.token.node(),
+		})
+		p.expectNext(COMMA, CPAREN)
+	}
+	p.object.methods = append(p.object.methods, m)
+	p.expectNext(SEMICOLON)
+	return parseMethodBody
+}
+
+func parseParams(p *Parser) parseStateFn {
+	var params []*decl
+	for p.curr.token.kind != CPAREN {
+		p.expect(INT, FLOAT, STRING, BOOLEAN)
+		p.expectNext(PARAMETER)
+		params = append(params, &decl{
+			kind: p.prevToken.kind,
+			node: p.curr.token.node(),
+		})
+		p.expectNext(COMMA, CPAREN)
+	}
+	p.expectNext(OBRACE)
+	p.method = &method{
+		decl:       p.decl,
+		parameters: params,
+	}
+	return parseMethodBody
+}
+
+// parseMethodBody parses lexer tokens until it reaches the end of the method
+func parseMethodBody(p *Parser) parseStateFn {
+	for p.curr.token.kind != CBRACE {
+		switch p.nextToken(); p.curr.token.kind {
+		case IDENTIFIER:
+			return parseExpression
+		case ASSIGN, LITERAL:
+			// initialization
+			// should handle literal tokens
 		case OPAREN:
-			method := &method{
-				decl:       d,
-				modifiers:  mods,
-				parameters: p.parseParameters(),
-				returnType: d.kind,
-			}
-			// reset mods and decl
-			// not good practice TODO: remove
-			mods = nil
-			d = decl{}
-			// TODO: parse method body
-			// skip to closing brace for now
-			for p.curr.kind != CBRACE {
-				p.nextToken()
-			}
-			class.methods = append(class.methods, method)
-		case ASSIGN:
-			f := &field{
-				decl:      d,
-				modifiers: mods,
-				initVal:   p.peek.value,
-			}
-			class.fields = append(class.fields, f)
-			p.nextToken() // move to init value
-		case SEMICOLON:
-			class.fields = append(class.fields, &field{
-				decl:      d,
-				modifiers: mods,
-			})
-		case CBRACE:
-			closeBraceCount--
-		case OBRACE:
-			closeBraceCount++
-		}
-		if closeBraceCount == 0 {
-			break
+			return parseArguments
 		}
 	}
-	return class, nil
+	p.addMethod()
+	return parseDeclaration
 }
 
-func (p *Parser) parseParameters() []*parameter {
-	parameters := []*parameter{}
-	for p.peek.kind != CPAREN {
-		p.nextToken()
-		if p.curr.kind == PARAMETER {
-			param := &parameter{
-				node: &node{
-					name: p.curr.value,
-					pos:  p.curr.pos,
-				},
-				value: p.prev.value,
-				kind:  p.prev.kind,
-			}
-			parameters = append(parameters, param)
+func parseExpression(p *Parser) parseStateFn {
+	// Todo, only works for the first object, next will overrite it selft and its never allowing nesting past 2 iterations.
+	if p.object == nil {
+		p.object = &object{
+			node: p.curr.token.node(),
 		}
 	}
-	return parameters
+	if p.peekToken.kind == DOT {
+		p.nextToken() // consume DOT
+		p.expectNext(IDENTIFIER)
+		obj := &object{
+			node: p.curr.token.node(),
+		}
+		p.object.fields = append(p.object.fields, obj)
+		p.method.body.objects = append(p.method.body.objects, p.object)
+		p.object = obj
+	} else if p.peekToken.kind != OPAREN {
+		p.object = nil // important to allow new standalone objects to be created
+		// not doing this results in an infinite nested object, even though do not relate to each other in the syntax.
+	}
+	return parseMethodBody
 }
 
-func (p *Parser) parseMethod() (*method, error) {
-	return &method{}, nil
+func parseField(p *Parser) parseStateFn {
+	return nil
+}
+
+func (p *Parser) addClass(c *class) {
+	p.file.classes = append(p.file.classes, c)
+}
+
+func (p *Parser) addMethod() {
+	p.class.methods = append(p.class.methods, p.method)
+}
+
+func (p *Parser) addField(initValue string) {
+	p.class.fields = append(p.class.fields, &field{decl: p.decl, initValue: initValue})
 }
 
 func (p *Parser) errorf(format string, args ...any) {
-	p.addError(fmt.Errorf(format, args...))
+	caller, _, _, ok := funcCaller(2)
+	format = fmt.Sprintf("%s: %s", p.curr.token.pos, format)
+	if ok {
+		format = fmt.Sprintf("(%s) %s", caller, format)
+	}
+	p.errors = append(p.errors, fmt.Errorf(format, args...))
 }
 
-// func (p *Parser) error(err string) {
-// 	p.addError(errors.New(err))
-// }
-
-func (p *Parser) addError(err error) {
-	p.errors = append(p.errors, err)
+func (p *Parser) error(err string) {
+	p.errors = append(p.errors, errors.New(err))
 }

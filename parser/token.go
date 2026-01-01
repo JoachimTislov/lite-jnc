@@ -1,18 +1,9 @@
 package parser
 
-import "fmt"
-
 type token struct {
 	*pos
 	value string
 	kind  tokenKind
-}
-
-func (t *token) String() string {
-	if t.kind == ERROR {
-		return fmt.Sprintf("ERROR(%v): \n\t%s", t.pos, t.value)
-	}
-	return fmt.Sprintf("kind: %-20s value: %-20s pos: %v", t.kind, t.value, t.pos)
 }
 
 type pos struct {
@@ -42,7 +33,12 @@ const (
 	LITERAL
 	KEYWORD
 	EOF
+
+	// errors
+	CRITICAL
 	ERROR
+	WARNING
+	INFO
 
 	// punctuations
 	OPAREN
@@ -67,7 +63,7 @@ const (
 	DELIMITER
 	SEMICOLON
 	COMMA
-	PERIOD
+	DOT
 	QUESTION
 	COLON
 
@@ -88,8 +84,8 @@ const (
 
 const (
 	// strings
-	TOKEN_EOF   = "EOF"
 	TOKEN_CLASS = "class"
+
 	// runes
 	TOKEN_QUOTE     = '"'
 	TOKEN_COMMA     = ','
@@ -104,9 +100,13 @@ const (
 func (t tokenKind) String() string {
 	switch t {
 	case EOF:
-		return TOKEN_EOF
+		return "EOF"
 	case ERROR:
-		return "error"
+		return "ERROR"
+	case WARNING:
+		return "WARNING"
+	case CRITICAL:
+		return "CRITICAL"
 	case IDENTIFIER:
 		return "identifier"
 	case CLASS:
@@ -119,7 +119,7 @@ func (t tokenKind) String() string {
 		return "semicolon"
 	case COMMA:
 		return "comma"
-	case PERIOD:
+	case DOT:
 		return "period"
 	case QUESTION:
 		return "question"
@@ -165,6 +165,38 @@ func (t tokenKind) String() string {
 		return "operand"
 	case OPERATOR:
 		return "operator"
+	case STRING:
+		return "string"
+	case INT:
+		return "int"
+	case FLOAT:
+		return "float"
+	case DOUBLE:
+		return "double"
+	case CHAR:
+		return "char"
+	case BOOLEAN:
+		return "boolean"
+	case EQUALS:
+		return "equals"
+	case ASSIGN:
+		return "assign"
+	case PLUS:
+		return "plus"
+	case MINUS:
+		return "minus"
+	case MULTIPLY:
+		return "multiply"
+	case DIVIDE:
+		return "divide"
+	case PERCENT:
+		return "percent"
+	case NOT:
+		return "not"
+	case LT:
+		return "less than"
+	case GT:
+		return "greater than"
 	default:
 		return "unknown"
 	}
