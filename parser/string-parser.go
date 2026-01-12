@@ -14,7 +14,7 @@ func (a modifiers) String() string {
 func (m *method) String() string {
 	fmt.Printf("\tMethod: %s", m.name)
 	for _, p := range m.parameters {
-		fmt.Printf("\n\t  kind: %s\n\t  name: %s\n", p.kind, p.name)
+		fmt.Printf("\n\t  kind: %s\n\t  name: %s\n", p.kind.name, p.name.name)
 	}
 	return ""
 }
@@ -31,20 +31,11 @@ func prettyPrintAST(a *AST) {
 				fmt.Printf("  Method: return type: %s name: %s (%s)\n", m.kind, m.name, m.modifiers)
 				fmt.Printf("    Parameters:\n")
 				for _, p := range m.parameters {
-					fmt.Printf("\t- kind: %s name: %s\n", p.kind, p.name)
+					fmt.Printf("\t- kind: %s name: %s\n", p.kind.name, p.name.name)
 				}
 				fmt.Printf("   Body:\n")
-				for _, obj := range m.body.objects {
-					fmt.Printf("    Object: %s\n", obj.name)
-					for _, field := range obj.fields {
-						fmt.Printf("     Field: %s\n", field.name)
-						for _, method := range field.methods {
-							fmt.Print(method)
-						}
-					}
-					for _, method := range obj.methods {
-						fmt.Printf("     Method: %s\n", method)
-					}
+				for _, ref := range m.body.references {
+					fmt.Printf("    Reference: %s\n", ref.name)
 				}
 			}
 		}

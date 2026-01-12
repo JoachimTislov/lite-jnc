@@ -18,76 +18,19 @@
 - Java references
     - [Language Specification](https://docs.oracle.com/javase/specs/jls/se17/html/index.html)
     - [Cheatsheet](https://introcs.cs.princeton.edu/java/11cheatsheet/)
+- [Tree-sitter](https://tree-sitter.github.io/tree-sitter/), [Java bindings](https://github.com/tree-sitter/java-tree-sitter)
 
-## Status overview
+## Project status
 
-- [x] Initial project setup
-- [x] Basic state machine implementation
-    - [x] lexer (strict, fault tolerant)
-    - [x] parser (strict)
-- [ ] Basic code generation setup
+[Status overview](./Status.md)
 
-- Lexical analysis: Designed to be strict and robust
-    - Errors
-        - [x] Basic generic error handling
-        - [ ] Critical
-        - [ ] Warnings
-        - [ ] Info
-    - [x] Keywords
-    - [x] Identifiers
-    - [x] Modifiers
-    - [x] Punctuations
-    - [x] Class
-        - [x] Method
-            - [x] Parameters
-            - [x] Return type
-            - [x] Call
-                - [x] Arguments
-        - [x] Field
-        - [ ] Variable
-        - [ ] Constructor
-        - [ ] Assingment
-    - Literals
-        - [x] String
-        - [ ] Numeric
-        - [ ] Boolean
-        - [ ] Character
-        - [ ] Null
-    - Types
-        - [x] Primitive types
-        - [ ] Array types
-        - [ ] Generic types
-    - Operators
-        - [ ] Arithmetic
-        - [ ] Logical
-        - [ ] Comparison
-- Parsing to AST
-    - [x] Classes
-        - [x] Fields
-        - [x] Methods
-        - [ ] Variables
-        - [ ] If-else
-        - [ ] Switch
-        - [ ] Loops
-    - [ ] Interfaces
-    - [ ] Inheritance
-    - [ ] Enums
-    - [ ] Packages
-- Code generation
-    - [ ] Native compilation
-        - [ ] x86-64 Linux ELF
-    - [ ] Intermediate representation
-    - [ ] LLVM
-    - Transpile
-        - [ ] GO
-        - [ ] JavaScript/TypeScript
-
-## TOODs
-
-### Lexer
+## TODOs
 
 - Handle missing ending punctionations convieniently
     - Either to the end of file or if the expected punctation is not found
     - A missing '"' or '`' can't be handled by any other means than reaching the end of the file. Logically the lexer can't know when the user intends to end the string. Same goes for alot of other unclosed punctuations:
         - `/*`
         - `(`, `{`, `[` - possible to avoid end of file before realizing that there is no closing `)`
+- Standardize the AST
+- Implement the LLVM pk
+    - Add Intermediate representation?

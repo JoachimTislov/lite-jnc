@@ -2,7 +2,7 @@ package parser
 
 type Node interface {
 	Name() string
-	Position() pos
+	Position() *pos
 }
 
 type Statement interface {
@@ -31,11 +31,27 @@ type decl struct {
 	modifiers
 }
 
-// object represents an instance of a class
-type object struct {
+type parameter struct {
+	name node
+	kind node
+}
+
+// reference represents an expression referencing a field, variable or method
+// inverse definition, end token is most relevant. Example; System.out.print(...)
+// becomes "print <- out <- System"
+type reference struct {
 	node
-	fields  []*object
-	methods []*method
+	parent *reference
+}
+
+type fn struct {
+	*reference
+	args []node
+}
+
+func (fn *fn) Evaluate() {}
+func (fn *fn) Position() *pos {
+	return fn.reference.pos
 }
 
 type field struct {
@@ -45,12 +61,12 @@ type field struct {
 
 type method struct {
 	*decl
-	parameters []*decl
+	parameters []*parameter
 	body
 }
 
 type body struct {
-	objects     []*object
+	references  []*reference
 	statements  []Statement
 	expressions []Expression
 }
@@ -86,7 +102,7 @@ type file struct {
 }
 
 type AST struct {
-	packages []pkg
+	packages []*pkg
 	files    []*file
 }
 
@@ -98,11 +114,11 @@ type parseStateFn func(*Parser) parseStateFn
 // keep in mind that its either these or more code per state function and thereby fewer state functions
 type curr struct {
 	*token
-	class  *class
-	method *method
-	object *object
-	file   *file
-	decl   *decl
+	class     *class
+	method    *method
+	reference *reference
+	file      *file
+	decl      *decl
 }
 
 // TODO: Consider adding a token buffer, possibly replace prev, peek with a slice of tokens
